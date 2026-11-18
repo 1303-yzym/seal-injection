@@ -24,3 +24,8 @@ coverage.html
 *.swp
 .DS_Store
 Thumbs.db
+
+# 沙箱内的 Go 缓存与临时目录
+/.gocache/
+/.gomodcache/
+/.tmp/

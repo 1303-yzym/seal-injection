@@ -12,6 +12,30 @@
 
 这是最简原型：只“新建一个空文档 + 盖章”，还不会往已有的 `.docx` 里插。
 
+## 图形界面
+
+不想记参数就用图形界面：启动后会自动打开浏览器（界面只是本地网页，服务只监听 `127.0.0.1`）。
+
+```bash
+go build -o out/seal-injection-gui.exe ./cmd/seal-injection-gui
+out/seal-injection-gui.exe
+```
+
+![图形界面](docs/screenshot.png)
+
+页面上可以：
+
+- 拖入或点选印章图片，立刻看到**去掉白底后的透明印章**（棋盘格是透明区域），也能一键切回原图对比；
+- 改印章宽度、位置（厘米），勾选是否盖在文字下方；
+- 直接下载 `.docx`，或单独导出透明 PNG。
+
+| 参数 | 说明 | 默认值 |
+| --- | --- | --- |
+| `-addr` | 监听地址 | `127.0.0.1:7788` |
+| `-no-browser` | 不自动打开浏览器 | 打开 |
+
+端口被占用时会自动换一个随机端口，地址打印在控制台。页面上的“退出服务”等同于关掉程序。
+
 ## 用法
 
 ```bash
@@ -51,11 +75,16 @@ out/seal-injection.exe -seal 我的印章.jpg -out out/seal.docx -ink "#C8322B"
 ## 目录结构
 
 ```
-main.go                    CLI：读图 → 提取 → 生成 docx
-internal/seal/extract.go   红章提取（红度 + 纸底校正 + 软阈值）
-internal/docx/docx.go      最简 .docx 生成（浮动图片定位）
-assets/seals/              印章图片（示例见 NOTICE.md）
+main.go                          CLI：读图 → 提取 → 生成 docx
+cmd/seal-injection-gui/main.go   图形界面：本地 HTTP 服务 + 接口
+cmd/seal-injection-gui/web/      界面页面（go:embed 打进二进制）
+internal/seal/extract.go         红章提取（红度 + 纸底校正 + 软阈值）
+internal/docx/docx.go            最简 .docx 生成（浮动图片定位）
+assets/seals/                    印章图片（示例见 NOTICE.md）
 ```
+
+图形界面没有引入任何第三方 GUI 库，全部是标准库，所以 `go build` 不需要 CGO，
+也不依赖系统里的运行时。
 
 ## 测试
 
@@ -64,7 +93,9 @@ go test ./...
 ```
 
 - `internal/seal`：合成一张“偏黄纸 + 灰色文字 + 红色圆环”的图，验证只保留红章、纸面和灰字被去干净；
-- `internal/docx`：验证生成的包结构、XML 合法性、尺寸与偏移是否写进 drawing。
+- `internal/docx`：验证生成的包结构、XML 合法性、尺寸与偏移是否写进 drawing；
+- `cmd/seal-injection-gui`：起一个测试服务，走完整的“上传 → 提取 → 预览 → 生成 docx”流程，
+  并验证非图片输入会被拒绝。
 
 ## 示例数据
 

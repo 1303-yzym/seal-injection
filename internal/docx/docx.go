@@ -8,6 +8,7 @@ package docx
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,30 +110,14 @@ const documentXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   </w:body>
 </w:document>`
 
-// WriteNew 新建一个只含该印章图片的 .docx。
-func WriteNew(path string, pic Picture) error {
+// Bytes 生成只含该印章图片的 .docx 内容，不落盘。
+func Bytes(pic Picture) ([]byte, error) {
 	if len(pic.PNG) == 0 {
-		return fmt.Errorf("docx: 图片数据为空")
+		return nil, fmt.Errorf("docx: 图片数据为空")
 	}
 	if pic.WidthEMU <= 0 || pic.HeightEMU <= 0 {
-		return fmt.Errorf("docx: 图片尺寸非法 %dx%d", pic.WidthEMU, pic.HeightEMU)
+		return nil, fmt.Errorf("docx: 图片尺寸非法 %dx%d", pic.WidthEMU, pic.HeightEMU)
 	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".seal-*.docx")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer func() {
-		tmp.Close()
-		os.Remove(tmpName) // 成功 rename 后这里是空操作
-	}()
-
-	zw := zip.NewWriter(tmp)
 
 	behind := 0
 	if pic.BehindText {
@@ -151,6 +136,9 @@ func WriteNew(path string, pic Picture) error {
 		{"word/_rels/document.xml.rels", []byte(documentRelsXML)},
 		{"word/media/seal.png", pic.PNG},
 	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
 	for _, p := range parts {
 		h := &zip.FileHeader{Name: p.name, Method: zip.Deflate, Modified: time.Now()}
 		if p.name == "word/media/seal.png" {
@@ -158,20 +146,30 @@ func WriteNew(path string, pic Picture) error {
 		}
 		w, err := zw.CreateHeader(h)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if _, err := w.Write(p.data); err != nil {
+			return nil, err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// WriteNew 新建一个只含该印章图片的 .docx。
+func WriteNew(path string, pic Picture) error {
+	data, err := Bytes(pic)
+	if err != nil {
+		return err
+	}
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 	}
-
-	if err := zw.Close(); err != nil {
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
+	return os.WriteFile(path, data, 0o644)
 }
 
 // CMToEMU 把厘米换算成 EMU。
